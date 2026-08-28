@@ -40,6 +40,13 @@ export interface ContentUpdate {
   latest: ModVersion
 }
 
+export interface DeviceCodePrompt {
+  userCode: string
+  verificationUri: string
+  expiresInSeconds: number
+  message: string
+}
+
 export interface ServerEntry {
   name: string
   address: string
@@ -100,6 +107,11 @@ export const api = {
   listAccounts: () =>
     raw.accounts.list() as Promise<{ accounts: Account[]; activeId: string | null }>,
   signInMicrosoft: () => raw.accounts.signInMicrosoft() as Promise<Account | null>,
+  signInDevice: () => raw.accounts.signInDevice() as Promise<Account | null>,
+  cancelDeviceSignIn: raw.accounts.cancelDeviceSignIn,
+  hasClientId: raw.accounts.hasClientId,
+  onDevicePrompt: (listener: (p: DeviceCodePrompt) => void) =>
+    raw.accounts.onDevicePrompt(listener as (p: unknown) => void),
   addOfflineAccount: (username: string) => raw.accounts.addOffline(username) as Promise<Account[]>,
   removeAccount: (id: string) => raw.accounts.remove(id) as Promise<Account[]>,
   setActiveAccount: (id: string) => raw.accounts.setActive(id) as Promise<string | null>,

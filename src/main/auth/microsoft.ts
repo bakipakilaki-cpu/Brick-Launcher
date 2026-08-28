@@ -11,6 +11,23 @@ const XSTS = 'https://xsts.auth.xboxlive.com/xsts/authorize'
 const MC_LOGIN = 'https://api.minecraftservices.com/authentication/login_with_xbox'
 const MC_PROFILE = 'https://api.minecraftservices.com/minecraft/profile'
 const SCOPE = 'XboxLive.signin offline_access'
+const DEVICE_CODE = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode'
+
+/**
+ * Baked-in Azure application (client) ID. Microsoft requires every app that
+ * signs into Xbox Live to register its own — there is no shared public ID — so
+ * fill this in once with your own registration and everyone using your builds
+ * gets Microsoft sign-in with no setup at all. Leave it empty to fall back to
+ * the per-user value in Settings.
+ *
+ * Register at https://portal.azure.com -> App registrations -> New:
+ *   - Supported account types: personal Microsoft accounts
+ *   - Authentication -> Allow public client flows: Yes   (device-code sign-in)
+ *   - Optionally add the "Mobile and desktop applications" platform with
+ *     redirect URI https://login.microsoftonline.com/common/oauth2/nativeclient
+ *     to enable the embedded browser flow as well.
+ */
+export const BUILTIN_MS_CLIENT_ID = ''
 
 function base64url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -259,4 +276,111 @@ export async function refreshAccount(account: Account, clientId: string): Promis
     skinUrl: session.skinUrl,
     capes: session.capes
   }
+}
+
+
+/* ---------------------------- device code flow ---------------------------- */
+
+export interface DeviceCodePrompt {
+  userCode: string
+  verificationUri: string
+  expiresInSeconds: number
+  message: string
+}
+
+interface DeviceCodeResponse {
+  device_code: string
+  user_code: string
+  verification_uri: string
+  expires_in: number
+  interval: number
+  message: string
+}
+
+/**
+ * Sign in without a redirect URI: Microsoft issues a short code, the user types
+ * it at microsoft.com/link, and we poll until they finish. Needs only "Allow
+ * public client flows" on the Azure app, which makes setup far simpler than the
+ * embedded browser flow.
+ */
+export async function signInWithDeviceCode(
+  clientId: string,
+  onPrompt: (prompt: DeviceCodePrompt) => void,
+  shouldCancel: () => boolean = () => false
+): Promise<Account | null> {
+  if (!clientId) {
+    throw new AuthError(
+      'No Microsoft client ID is configured.',
+      'Add one in Settings → Accounts, or bake one into BUILTIN_MS_CLIENT_ID so your builds need no setup.'
+    )
+  }
+
+  const startRes = await postForm(DEVICE_CODE, { client_id: clientId, scope: SCOPE })
+  const start = (await startRes.json()) as DeviceCodeResponse & { error?: string; error_description?: string }
+  if (start.error) {
+    throw new AuthError(
+      `Microsoft refused to start sign-in: ${start.error_description ?? start.error}`,
+      start.error === 'unauthorized_client'
+        ? 'Enable "Allow public client flows" on the Azure app registration.'
+        : undefined
+    )
+  }
+
+  onPrompt({
+    userCode: start.user_code,
+    verificationUri: start.verification_uri,
+    expiresInSeconds: start.expires_in,
+    message: start.message
+  })
+
+  const deadline = Date.now() + start.expires_in * 1000
+  // Microsoft dictates the poll interval and will tell us to back off further.
+  let intervalMs = Math.max(1, start.interval || 5) * 1000
+
+  while (Date.now() < deadline) {
+    if (shouldCancel()) return null
+    await new Promise((r) => setTimeout(r, intervalMs))
+
+    const res = await fetch(TOKEN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: start.device_code
+      }).toString()
+    })
+    const body = (await res.json()) as MsTokens & { error?: string; error_description?: string }
+
+    if (res.ok && body.access_token) {
+      const session = await xboxToMinecraft(body.access_token)
+      return {
+        id: randomUUID(),
+        kind: 'microsoft',
+        username: session.name,
+        uuid: session.uuid,
+        accessToken: session.token,
+        refreshToken: body.refresh_token,
+        expiresAt: session.expiresAt,
+        xuid: session.xuid,
+        skinUrl: session.skinUrl,
+        capes: session.capes
+      }
+    }
+
+    switch (body.error) {
+      case 'authorization_pending':
+        continue
+      case 'slow_down':
+        intervalMs += 5000
+        continue
+      case 'authorization_declined':
+        throw new AuthError('Sign-in was declined in the browser.')
+      case 'expired_token':
+        throw new AuthError('The sign-in code expired. Start again.')
+      default:
+        throw new AuthError(body.error_description ?? `Sign-in failed: ${body.error ?? res.status}`)
+    }
+  }
+  throw new AuthError('The sign-in code expired before it was used.')
 }

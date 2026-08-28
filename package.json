@@ -3,7 +3,10 @@
   "version": "1.1.0",
   "description": "A Minecraft launcher with Modrinth-style mod browsing, every mod loader, and skin management.",
   "main": "out/main/index.js",
-  "author": "Brick",
+  "author": {
+    "name": "bakipakilaki-cpu",
+    "email": "bakipakilaki-cpu@users.noreply.github.com"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
@@ -132,5 +135,10 @@
         "to": "build/icon.png"
       }
     ]
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bakipakilaki-cpu/Brick-Launcher.git"
+  },
+  "homepage": "https://github.com/bakipakilaki-cpu/Brick-Launcher"
 }

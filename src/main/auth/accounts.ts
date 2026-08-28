@@ -1,6 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { store } from '../store.js'
-import { refreshAccount, signInWithMicrosoft } from './microsoft.js'
+import {
+  BUILTIN_MS_CLIENT_ID,
+  refreshAccount,
+  signInWithDeviceCode,
+  signInWithMicrosoft,
+  type DeviceCodePrompt
+} from './microsoft.js'
 import type { Account } from '../../shared/types.js'
 
 /**
@@ -71,8 +77,31 @@ export function getAccountRaw(id: string): Account | undefined {
   return store.get('accounts').find((a) => a.id === id)
 }
 
+/**
+ * The client ID compiled into the build wins over the per-user setting, so a
+ * distributed build signs in with no configuration at all.
+ */
+export function resolveClientId(): string {
+  return BUILTIN_MS_CLIENT_ID.trim() || store.get('settings').msClientId.trim()
+}
+
+export function hasClientId(): boolean {
+  return resolveClientId().length > 0
+}
+
 export async function signIn(): Promise<Account | null> {
-  const account = await signInWithMicrosoft(store.get('settings').msClientId)
+  const account = await signInWithMicrosoft(resolveClientId())
+  if (!account) return null
+  addAccount(account)
+  return { ...account, accessToken: undefined, refreshToken: undefined }
+}
+
+/** Sign in via device code — no redirect URI needed on the Azure app. */
+export async function signInDevice(
+  onPrompt: (prompt: DeviceCodePrompt) => void,
+  shouldCancel: () => boolean
+): Promise<Account | null> {
+  const account = await signInWithDeviceCode(resolveClientId(), onPrompt, shouldCancel)
   if (!account) return null
   addAccount(account)
   return { ...account, accessToken: undefined, refreshToken: undefined }
@@ -87,7 +116,7 @@ export async function ensureValidSession(id: string): Promise<Account> {
   if (!account) throw new Error('That account is no longer available. Pick another one.')
   if (account.kind === 'offline') return account
 
-  const refreshed = await refreshAccount(account, store.get('settings').msClientId)
+  const refreshed = await refreshAccount(account, resolveClientId())
   if (refreshed.accessToken !== account.accessToken) {
     const accounts = store.get('accounts')
     const index = accounts.findIndex((a) => a.id === id)

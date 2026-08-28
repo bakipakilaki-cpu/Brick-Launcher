@@ -39,6 +39,10 @@ const api = {
   accounts: {
     list: () => call('accounts:list'),
     signInMicrosoft: () => call('accounts:signInMicrosoft'),
+    signInDevice: () => call('accounts:signInDevice'),
+    cancelDeviceSignIn: () => call<void>('accounts:cancelDeviceSignIn'),
+    hasClientId: () => call<boolean>('accounts:hasClientId'),
+    onDevicePrompt: (listener: (payload: unknown) => void) => on('accounts:devicePrompt', listener),
     addOffline: (username: string) => call('accounts:addOffline', username),
     remove: (id: string) => call('accounts:remove', id),
     setActive: (id: string) => call('accounts:setActive', id),

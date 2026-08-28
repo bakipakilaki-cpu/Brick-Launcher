@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, LogIn, Plus, Trash2, UserRound, WifiOff } from 'lucide-react'
-import { useState } from 'react'
+import { Check, Copy, ExternalLink, LogIn, Plus, Trash2, UserRound, WifiOff } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { api } from '../lib/api'
 import { useStore } from '../store/useStore'
-import { Modal } from './ui'
+import { Modal, Spinner } from './ui'
+import type { DeviceCodePrompt } from '../lib/api'
 import type { Account } from '../../shared/types'
 
 /** Head render for a player, served by Crafatar for premium accounts. */
@@ -91,18 +92,51 @@ export function AccountModal({ open, onClose }: { open: boolean; onClose: () => 
 
   const [offlineName, setOfflineName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [prompt, setPrompt] = useState<DeviceCodePrompt | null>(null)
+  const [hasClientId, setHasClientId] = useState(true)
+
+  useEffect(() => {
+    api.hasClientId().then(setHasClientId).catch(() => setHasClientId(false))
+    // The device-code prompt arrives from the main process mid-sign-in.
+    return api.onDevicePrompt((p) => setPrompt(p))
+  }, [])
+
+  const finishSignIn = (account: Awaited<ReturnType<typeof api.signInMicrosoft>>): void => {
+    if (account) toast('success', `Signed in as ${account.username}`)
+  }
 
   const signIn = async (): Promise<void> => {
     setBusy(true)
     try {
       const account = await api.signInMicrosoft()
       await refreshAccounts()
-      if (account) toast('success', `Signed in as ${account.username}`)
+      finishSignIn(account)
     } catch (err) {
       toast('error', err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
+  }
+
+  /** Device code: no redirect URI needed, so it works on a minimal Azure app. */
+  const signInDevice = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      const account = await api.signInDevice()
+      await refreshAccounts()
+      finishSignIn(account)
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+      setPrompt(null)
+    }
+  }
+
+  const cancelDevice = async (): Promise<void> => {
+    await api.cancelDeviceSignIn()
+    setPrompt(null)
+    setBusy(false)
   }
 
   const addOffline = async (): Promise<void> => {
@@ -190,11 +224,69 @@ export function AccountModal({ open, onClose }: { open: boolean; onClose: () => 
 
       <div className="stack sm">
         <div className="field-label">Add a Microsoft account</div>
-        <button className="btn primary" onClick={signIn} disabled={busy}>
-          <LogIn size={15} /> Sign in with Microsoft
-        </button>
+
+        {prompt ? (
+          <div className="card pad stack sm" style={{ borderColor: 'var(--accent-line)' }}>
+            <div className="bold">Finish signing in</div>
+            <div className="small muted">
+              Open the page below and enter this code. This window will pick it up automatically.
+            </div>
+            <div
+              className="mono selectable"
+              style={{
+                fontSize: 26,
+                fontWeight: 700,
+                letterSpacing: 4,
+                textAlign: 'center',
+                padding: '12px 0',
+                color: 'var(--accent)'
+              }}
+            >
+              {prompt.userCode}
+            </div>
+            <div className="hstack sm">
+              <button
+                className="btn primary"
+                style={{ flex: 1 }}
+                onClick={() => api.openExternal(prompt.verificationUri)}
+              >
+                <ExternalLink size={15} /> Open sign-in page
+              </button>
+              <button
+                className="btn"
+                onClick={() => navigator.clipboard.writeText(prompt.userCode)}
+                title="Copy code"
+              >
+                <Copy size={15} />
+              </button>
+            </div>
+            <div className="hstack sm faint small" style={{ justifyContent: 'center' }}>
+              <Spinner size={13} /> Waiting for you to approve…
+            </div>
+            <button className="btn ghost sm" onClick={cancelDevice}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="hstack sm">
+            <button className="btn primary" style={{ flex: 1 }} onClick={signIn} disabled={busy}>
+              {busy ? <Spinner size={14} /> : <LogIn size={15} />} Sign in with Microsoft
+            </button>
+            <button className="btn" onClick={signInDevice} disabled={busy} title="Use a sign-in code instead">
+              Use a code
+            </button>
+          </div>
+        )}
+
         <div className="field-hint">
           Required to play on servers that verify accounts, and to change your skin.
+          {!hasClientId && (
+            <>
+              {' '}
+              <strong>No Microsoft client ID is configured</strong> — add one in Settings →
+              Accounts. Offline accounts work without it.
+            </>
+          )}
         </div>
       </div>
 

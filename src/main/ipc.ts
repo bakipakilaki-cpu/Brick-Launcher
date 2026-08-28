@@ -20,6 +20,9 @@ import { launchInstance, repairInstance } from './minecraft/launch.js'
 import { detectJavaRuntimes, downloadJava } from './minecraft/java.js'
 import type { ProjectType, SearchQuery } from '../shared/types.js'
 
+/** Set when the user aborts an in-flight device-code sign-in. */
+let deviceCancelled = false
+
 /** Running games, keyed by instance id. */
 const running = new Map<string, { child: ChildProcess; startedAt: number }>()
 
@@ -131,6 +134,19 @@ export function registerIpc(): void {
     activeId: accounts.getActiveAccountId()
   }))
   handle('accounts:signInMicrosoft', () => accounts.signIn())
+  handle('accounts:hasClientId', () => accounts.hasClientId())
+
+  /** Device-code sign-in: the prompt is pushed to the UI, then we poll. */
+  handle('accounts:signInDevice', async () => {
+    deviceCancelled = false
+    return accounts.signInDevice(
+      (prompt) => broadcast('accounts:devicePrompt', prompt),
+      () => deviceCancelled
+    )
+  })
+  handle('accounts:cancelDeviceSignIn', () => {
+    deviceCancelled = true
+  })
   handle('accounts:addOffline', (username: string) =>
     accounts.addAccount(accounts.createOfflineAccount(username))
   )
