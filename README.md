@@ -13,7 +13,7 @@ npm run dev          # development, with hot reload
 npm run build        # production build into out/
 npm run dist:mac     # .dmg + .zip (arm64 and x64)
 npm run dist:win     # .exe installer (NSIS) + portable .zip
-npm run dist:linux   # .AppImage + .deb + .tar.gz
+npm run dist:linux   # .AppImage + .tar.gz
 ```
 
 All artifacts land in `release/`. Icons are generated from `build/icon.svg`
@@ -22,8 +22,13 @@ into `.icns` (macOS), `.ico` (Windows) and `.png` (Linux).
 **Cross-building caveat:** macOS can produce Windows and Linux packages, but
 some targets need extra tooling that only exists on the native OS (or in
 Docker). `zip` and `tar.gz` are pure-archive targets and always cross-build
-cleanly; `nsis` needs wine (electron-builder fetches it) and `deb` needs
-`dpkg` + `fakeroot` (`brew install dpkg fakeroot` on macOS). Build on the
+cleanly, and `nsis` works via wine (electron-builder fetches it).
+
+**`.deb` cannot be built on macOS.** electron-builder's bundled `fpm` shells out
+to `ar`, and macOS ships BSD `ar`, which writes an archive `dpkg` cannot read —
+the build *reports success* and produces a corrupt package. Build it on Linux
+(or in Docker/CI) with `npm run dist:linux-deb`. AppImage covers desktop Linux
+in the meantime and integrates itself into the application menu. Build on the
 target OS, or in CI with a matrix, for guaranteed installers.
 
 The packaged build is **unsigned** (`identity: null` in the electron-builder
