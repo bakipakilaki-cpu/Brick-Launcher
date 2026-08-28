@@ -1,5 +1,14 @@
 node_modules/
 release/
 dist/
-build/
 .DS_Store
+
+# Build output — regenerate with `npm run build`
+out/
+
+# build/ holds generated icon artifacts, but the sources are needed to package
+build/*
+!build/icon.svg
+!build/icon.png
+!build/icon.icns
+!build/icon.ico

@@ -1,6 +1,6 @@
 {
   "name": "brick-launcher",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A Minecraft launcher with Modrinth-style mod browsing, every mod loader, and skin management.",
   "main": "out/main/index.js",
   "author": "Brick",

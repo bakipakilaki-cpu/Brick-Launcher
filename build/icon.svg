@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%" stop-color="#252b34"/>
+      <stop offset="100%" stop-color="#12151a"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4df594"/>
+      <stop offset="100%" stop-color="#1bd96a"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#17c15e"/>
+      <stop offset="100%" stop-color="#0d7a3b"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#12a04d"/>
+      <stop offset="100%" stop-color="#095c2c"/>
+    </linearGradient>
+    <filter id="drop" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="26" stdDeviation="34" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- macOS squircle plate -->
+  <path fill="url(#bg)" d="M512 40c236 0 332 0 396 64s64 160 64 396 0 332-64 396-160 64-396 64-332 0-396-64S48 748 48 512s0-332 64-396S276 40 512 40z"/>
+
+  <!-- inner rim light -->
+  <path fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"
+        d="M512 43c235 0 330 0 394 63s63 159 63 394 0 330-63 394-159 63-394 63-330 0-394-63S51 747 51 512s0-330 63-394S277 43 512 43z"/>
+
+  <g filter="url(#drop)" transform="translate(512 530) scale(7.4) translate(-32 -32)">
+    <!-- top face -->
+    <path d="M32 6 L58 20 L32 34 L6 20 Z" fill="url(#top)"/>
+    <!-- left face -->
+    <path d="M6 20 L32 34 L32 58 L6 44 Z" fill="url(#left)"/>
+    <!-- right face -->
+    <path d="M58 20 L58 44 L32 58 L32 34 Z" fill="url(#right)"/>
+
+    <!-- studs -->
+    <g fill="#05130a" opacity="0.32">
+      <ellipse cx="23" cy="17" rx="4.6" ry="2.6"/>
+      <ellipse cx="41" cy="17" rx="4.6" ry="2.6"/>
+      <ellipse cx="23" cy="26" rx="4.6" ry="2.6"/>
+      <ellipse cx="41" cy="26" rx="4.6" ry="2.6"/>
+    </g>
+
+    <!-- front edge highlight -->
+    <path d="M6 20 L32 34 L58 20" stroke="#7dffb4" stroke-width="1.4"
+          stroke-linejoin="round" opacity="0.55" fill="none"/>
+  </g>
+</svg>
