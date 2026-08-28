@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { ensureDirs } from './paths.js'
 import { store } from './store.js'
 import { registerIpc, stopAllGames } from './ipc.js'
+import { integrateLinuxDesktop } from './linuxDesktop.js'
 
 const isDev = !app.isPackaged
 
@@ -47,6 +48,10 @@ app.whenReady().then(() => {
   store.load()
   registerIpc()
   createWindow()
+
+  // On Linux the AppImage/tar.gz builds have no installer, so add the menu
+  // entry and desktop shortcut ourselves. Runs once, then leaves the user alone.
+  void integrateLinuxDesktop()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

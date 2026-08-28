@@ -398,7 +398,7 @@ function JavaStep({ onNext }: { onNext: () => void }) {
       <div className="stack sm">
         <div className="field-label">Install a runtime now</div>
         <div className="hstack sm" style={{ flexWrap: 'wrap' }}>
-          {[21, 17, 8].map((major) => (
+          {[25, 21, 17, 8].map((major) => (
             <button
               key={major}
               className="btn"
@@ -408,7 +408,7 @@ function JavaStep({ onNext }: { onNext: () => void }) {
               {installing === major ? <Spinner /> : has(major) ? <Check size={15} /> : <Download size={15} />}
               Java {major}
               <span className="faint" style={{ fontWeight: 500 }}>
-                {major === 21 ? '1.20.5+' : major === 17 ? '1.17–1.20.4' : '1.16 and older'}
+                {major === 25 ? 'newest' : major === 21 ? '1.20.5+' : major === 17 ? '1.17–1.20.4' : '1.16 and older'}
               </span>
             </button>
           ))}

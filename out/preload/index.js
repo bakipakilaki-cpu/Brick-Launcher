@@ -16,6 +16,7 @@ const api = {
     openPath: (path) => call("app:openPath", path),
     openExternal: (url) => call("app:openExternal", url),
     readImage: (filePath) => call("app:readImage", filePath),
+    createShortcuts: () => call("app:createShortcuts"),
     pickFiles: (options) => call("app:pickFiles", options)
   },
   settings: {

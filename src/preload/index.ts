@@ -25,6 +25,7 @@ const api = {
     openPath: (path: string) => call<void>('app:openPath', path),
     openExternal: (url: string) => call<void>('app:openExternal', url),
     readImage: (filePath: string) => call<string>('app:readImage', filePath),
+    createShortcuts: () => call('app:createShortcuts'),
     pickFiles: (options: {
       filters?: { name: string; extensions: string[] }[]
       multi?: boolean

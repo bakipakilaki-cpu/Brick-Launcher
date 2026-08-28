@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, readdir, rm } from 'node:fs/promises'
+import { chmod, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { arch, platform } from 'node:os'
 import { join } from 'node:path'
@@ -47,18 +47,54 @@ export async function probeJava(javaPath: string): Promise<JavaRuntime | null> {
   }
 }
 
-function bundledJavaBin(major: number): string {
-  const home = join(paths.java, `jre-${major}`)
-  return platform() === 'win32'
-    ? join(home, 'bin', 'java.exe')
-    : join(home, 'Contents', 'Home', 'bin', 'java')
-}
-
 /** macOS JDK bundles nest under Contents/Home; Linux tarballs do not. */
 function candidateBinsFor(home: string): string[] {
   return platform() === 'win32'
     ? [join(home, 'bin', 'java.exe')]
     : [join(home, 'Contents', 'Home', 'bin', 'java'), join(home, 'bin', 'java')]
+}
+
+/**
+ * Adoptium zips nest everything under a single versioned folder. Move that
+ * folder's contents up one level so every platform ends up with the same
+ * <home>/bin/java layout.
+ */
+async function flattenSingleWrapper(home: string): Promise<void> {
+  const entries = await readdir(home, { withFileTypes: true }).catch(() => [])
+  const dirs = entries.filter((e) => e.isDirectory())
+  if (entries.length !== 1 || dirs.length !== 1) return
+
+  const wrapper = join(home, dirs[0].name)
+  for (const child of await readdir(wrapper)) {
+    await rename(join(wrapper, child), join(home, child))
+  }
+  await rm(wrapper, { recursive: true, force: true })
+}
+
+/**
+ * Find the java executable under an extracted runtime. Checks the known
+ * layouts first, then falls back to a shallow scan so an unexpected archive
+ * shape still yields a working binary instead of a hard failure.
+ */
+async function locateJavaBinary(home: string): Promise<string | null> {
+  for (const candidate of candidateBinsFor(home)) {
+    if (existsSync(candidate)) return candidate
+  }
+  const exe = platform() === 'win32' ? 'java.exe' : 'java'
+  const search = async (dir: string, depth: number): Promise<string | null> => {
+    if (depth > 4) return null
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      const full = join(dir, entry.name)
+      if (entry.isFile() && entry.name === exe) return full
+      if (entry.isDirectory()) {
+        const hit = await search(full, depth + 1)
+        if (hit) return hit
+      }
+    }
+    return null
+  }
+  return search(home, 0)
 }
 
 async function findSystemJava(): Promise<string[]> {
@@ -116,10 +152,14 @@ export async function detectJavaRuntimes(): Promise<JavaRuntime[]> {
   const seenHomes = new Set<string>()
 
   // Runtimes Brick installed itself take priority, so probe them first and let
-  // them claim their java.home before any system alias for the same JVM.
-  for (const major of [8, 17, 21]) {
-    const bin = bundledJavaBin(major)
-    if (!existsSync(bin)) continue
+  // them claim their java.home before any system alias for the same JVM. Scan
+  // for whatever has been downloaded rather than a fixed list of majors — new
+  // Minecraft versions keep raising the required Java version.
+  const bundledDirs = (await readdir(paths.java).catch(() => [] as string[]))
+    .filter((name) => name.startsWith('jre-'))
+  for (const name of bundledDirs) {
+    const bin = await locateJavaBinary(join(paths.java, name))
+    if (!bin) continue
     const probed = await probeJava(bin)
     if (probed && !seenHomes.has(probed.home)) {
       seenHomes.add(probed.home)
@@ -175,8 +215,9 @@ export async function downloadJava(
   major: number,
   onProgress: (detail: string, progress: number) => void
 ): Promise<string> {
-  const bin = bundledJavaBin(major)
-  if (existsSync(bin)) return bin
+  const home = join(paths.java, `jre-${major}`)
+  const existing = await locateJavaBinary(home)
+  if (existing) return existing
 
   onProgress(`Looking up Java ${major}`, 0.05)
   const url =
@@ -186,7 +227,6 @@ export async function downloadJava(
   if (!assets.length) throw new Error(`No Temurin JRE ${major} build for ${adoptiumOs()}/${adoptiumArch()}`)
 
   const pkg = assets[0].binary.package
-  const home = join(paths.java, `jre-${major}`)
   const archive = join(paths.java, pkg.name)
 
   onProgress(`Downloading Java ${major} (${Math.round(pkg.size / 1048576)} MB)`, 0.2)
@@ -199,18 +239,20 @@ export async function downloadJava(
   if (pkg.name.endsWith('.zip')) {
     const { default: AdmZip } = await import('adm-zip')
     new AdmZip(archive).extractAllTo(home, true)
+    // Zip archives keep their "jdk-25.0.1+9-jre" wrapper directory, which the
+    // tar path strips via --strip-components. Flatten it so the layout matches.
+    await flattenSingleWrapper(home)
   } else {
     // --strip-components drops the "jdk-21.0.5+11-jre" wrapper directory.
     await run('tar', ['-xzf', archive, '-C', home, '--strip-components=1'])
   }
   await rm(archive, { force: true })
 
-  for (const candidate of candidateBinsFor(home)) {
-    if (existsSync(candidate)) {
-      await chmod(candidate, 0o755).catch(() => {})
-      onProgress(`Java ${major} ready`, 1)
-      return candidate
-    }
+  const found = await locateJavaBinary(home)
+  if (found) {
+    await chmod(found, 0o755).catch(() => {})
+    onProgress(`Java ${major} ready`, 1)
+    return found
   }
   throw new Error(`Extracted Java ${major} but found no java binary under ${home}`)
 }

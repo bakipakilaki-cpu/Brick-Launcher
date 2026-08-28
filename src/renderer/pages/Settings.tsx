@@ -8,6 +8,7 @@ import {
   Info,
   Key,
   MemoryStick,
+  Monitor,
   Palette,
   Sparkles,
   UserRound
@@ -29,12 +30,16 @@ export function SettingsPage() {
   const [installing, setInstalling] = useState<number | null>(null)
   const [accountsOpen, setAccountsOpen] = useState(false)
   const [paths, setPaths] = useState<Record<string, string>>({})
+  const [platform, setPlatform] = useState('')
   const [clientId, setClientId] = useState('')
   const [cfKey, setCfKey] = useState('')
 
   useEffect(() => {
     api.detectJava().then(setRuntimes).catch(() => setRuntimes([]))
-    api.info().then((info) => setPaths(info.paths))
+    api.info().then((info) => {
+      setPaths(info.paths)
+      setPlatform(info.platform)
+    })
   }, [])
 
   useEffect(() => {
@@ -164,7 +169,7 @@ export function SettingsPage() {
         )}
 
         <div className="hstack sm" style={{ flexWrap: 'wrap' }}>
-          {[21, 17, 8].map((major) => {
+          {[25, 21, 17, 8].map((major) => {
             const present = runtimes?.some((r) => r.major === major)
             return (
               <button
@@ -299,6 +304,36 @@ export function SettingsPage() {
           }
         />
       </Section>
+
+      {/* ----------------------------- linux desktop -------------------------- */}
+      {platform === 'linux' && (
+        <Section icon={<Monitor size={17} />} title="Desktop integration">
+          <Row
+            title="Application menu and desktop shortcut"
+            hint="Brick adds these automatically on first run. Use this to put them back if they were removed, or after moving the AppImage."
+            control={
+              <button
+                className="btn"
+                onClick={async () => {
+                  try {
+                    const result = await api.createShortcuts()
+                    toast(
+                      result.applied ? 'success' : 'error',
+                      result.applied
+                        ? `Added to the application menu${result.desktopShortcut ? ' and desktop' : ''}.`
+                        : result.reason ?? 'Could not create shortcuts.'
+                    )
+                  } catch (err) {
+                    toast('error', err instanceof Error ? err.message : String(err))
+                  }
+                }}
+              >
+                <Monitor size={15} /> Create shortcuts
+              </button>
+            }
+          />
+        </Section>
+      )}
 
       {/* -------------------------------- files ------------------------------- */}
       <Section icon={<FolderOpen size={17} />} title="Files">

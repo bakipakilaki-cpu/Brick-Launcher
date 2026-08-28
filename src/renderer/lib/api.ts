@@ -86,6 +86,13 @@ export const api = {
   openExternal: raw.app.openExternal,
   pickFiles: raw.app.pickFiles,
   readImage: raw.app.readImage,
+  createShortcuts: () =>
+    raw.app.createShortcuts() as Promise<{
+      applied: boolean
+      menuEntry?: string
+      desktopShortcut?: string
+      reason?: string
+    }>,
 
   getSettings: () => raw.settings.get() as Promise<Settings>,
   setSettings: (patch: Partial<Settings>) => raw.settings.set(patch) as Promise<Settings>,

@@ -8,6 +8,7 @@ import * as accounts from './auth/accounts.js'
 import * as instances from './instances.js'
 import * as skins from './skins.js'
 import * as servers from './servers.js'
+import { integrateLinuxDesktop } from './linuxDesktop.js'
 import * as content from './mods/content.js'
 import * as modrinth from './mods/modrinth.js'
 import * as curseforge from './mods/curseforge.js'
@@ -437,6 +438,8 @@ export function registerIpc(): void {
       }
     }
   )
+
+  handle('app:createShortcuts', () => integrateLinuxDesktop(true))
 
   /* ------------------------------ servers ------------------------------ */
 

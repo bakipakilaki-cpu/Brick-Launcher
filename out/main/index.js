@@ -635,10 +635,10 @@ async function installFabricLike(kind, mcVersion, loaderVersion) {
   await writeVersionJson(profile.id, profile);
   return profile.id;
 }
-const run$1 = node_util.promisify(node_child_process.execFile);
+const run$2 = node_util.promisify(node_child_process.execFile);
 async function probeJava(javaPath) {
   try {
-    const { stderr, stdout } = await run$1(javaPath, ["-XshowSettings:properties", "-version"], {
+    const { stderr, stdout } = await run$2(javaPath, ["-XshowSettings:properties", "-version"], {
       timeout: 8e3
     });
     const text = `${stderr}
@@ -654,19 +654,45 @@ ${stdout}`;
     return null;
   }
 }
-function bundledJavaBin(major) {
-  const home = node_path.join(paths.java, `jre-${major}`);
-  return node_os.platform() === "win32" ? node_path.join(home, "bin", "java.exe") : node_path.join(home, "Contents", "Home", "bin", "java");
-}
 function candidateBinsFor(home) {
   return node_os.platform() === "win32" ? [node_path.join(home, "bin", "java.exe")] : [node_path.join(home, "Contents", "Home", "bin", "java"), node_path.join(home, "bin", "java")];
+}
+async function flattenSingleWrapper(home) {
+  const entries = await promises.readdir(home, { withFileTypes: true }).catch(() => []);
+  const dirs = entries.filter((e) => e.isDirectory());
+  if (entries.length !== 1 || dirs.length !== 1) return;
+  const wrapper = node_path.join(home, dirs[0].name);
+  for (const child of await promises.readdir(wrapper)) {
+    await promises.rename(node_path.join(wrapper, child), node_path.join(home, child));
+  }
+  await promises.rm(wrapper, { recursive: true, force: true });
+}
+async function locateJavaBinary(home) {
+  for (const candidate of candidateBinsFor(home)) {
+    if (node_fs.existsSync(candidate)) return candidate;
+  }
+  const exe = node_os.platform() === "win32" ? "java.exe" : "java";
+  const search2 = async (dir, depth) => {
+    if (depth > 4) return null;
+    const entries = await promises.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const full = node_path.join(dir, entry.name);
+      if (entry.isFile() && entry.name === exe) return full;
+      if (entry.isDirectory()) {
+        const hit = await search2(full, depth + 1);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+  return search2(home, 0);
 }
 async function findSystemJava() {
   const found = [];
   if (process.env.JAVA_HOME) found.push(node_path.join(process.env.JAVA_HOME, "bin", "java"));
   if (node_os.platform() === "darwin") {
     try {
-      const { stdout } = await run$1("/usr/libexec/java_home", ["-V"], { timeout: 8e3 });
+      const { stdout } = await run$2("/usr/libexec/java_home", ["-V"], { timeout: 8e3 });
       for (const line of stdout.split("\n")) {
         const m = line.match(/\s(\/.+?)$/);
         if (m) found.push(node_path.join(m[1].trim(), "bin", "java"));
@@ -704,9 +730,10 @@ async function findSystemJava() {
 async function detectJavaRuntimes() {
   const results = [];
   const seenHomes = /* @__PURE__ */ new Set();
-  for (const major of [8, 17, 21]) {
-    const bin = bundledJavaBin(major);
-    if (!node_fs.existsSync(bin)) continue;
+  const bundledDirs = (await promises.readdir(paths.java).catch(() => [])).filter((name) => name.startsWith("jre-"));
+  for (const name of bundledDirs) {
+    const bin = await locateJavaBinary(node_path.join(paths.java, name));
+    if (!bin) continue;
     const probed = await probeJava(bin);
     if (probed && !seenHomes.has(probed.home)) {
       seenHomes.add(probed.home);
@@ -743,14 +770,14 @@ function adoptiumArch() {
   }
 }
 async function downloadJava(major, onProgress) {
-  const bin = bundledJavaBin(major);
-  if (node_fs.existsSync(bin)) return bin;
+  const home = node_path.join(paths.java, `jre-${major}`);
+  const existing = await locateJavaBinary(home);
+  if (existing) return existing;
   onProgress(`Looking up Java ${major}`, 0.05);
   const url = `https://api.adoptium.net/v3/assets/latest/${major}/hotspot?architecture=${adoptiumArch()}&image_type=jre&os=${adoptiumOs()}&vendor=eclipse`;
   const assets = await getJson(url);
   if (!assets.length) throw new Error(`No Temurin JRE ${major} build for ${adoptiumOs()}/${adoptiumArch()}`);
   const pkg = assets[0].binary.package;
-  const home = node_path.join(paths.java, `jre-${major}`);
   const archive = node_path.join(paths.java, pkg.name);
   onProgress(`Downloading Java ${major} (${Math.round(pkg.size / 1048576)} MB)`, 0.2);
   await downloadFile({ url: pkg.link, dest: archive, size: pkg.size });
@@ -760,17 +787,17 @@ async function downloadJava(major, onProgress) {
   if (pkg.name.endsWith(".zip")) {
     const { default: AdmZip2 } = await import("adm-zip");
     new AdmZip2(archive).extractAllTo(home, true);
+    await flattenSingleWrapper(home);
   } else {
-    await run$1("tar", ["-xzf", archive, "-C", home, "--strip-components=1"]);
+    await run$2("tar", ["-xzf", archive, "-C", home, "--strip-components=1"]);
   }
   await promises.rm(archive, { force: true });
-  for (const candidate of candidateBinsFor(home)) {
-    if (node_fs.existsSync(candidate)) {
-      await promises.chmod(candidate, 493).catch(() => {
-      });
-      onProgress(`Java ${major} ready`, 1);
-      return candidate;
-    }
+  const found = await locateJavaBinary(home);
+  if (found) {
+    await promises.chmod(found, 493).catch(() => {
+    });
+    onProgress(`Java ${major} ready`, 1);
+    return found;
   }
   throw new Error(`Extracted Java ${major} but found no java binary under ${home}`);
 }
@@ -789,7 +816,7 @@ async function resolveJavaFor(requiredMajor, override, onProgress) {
   }
   return downloadJava(requiredMajor, onProgress);
 }
-const run = node_util.promisify(node_child_process.execFile);
+const run$1 = node_util.promisify(node_child_process.execFile);
 const FORGE_MAVEN = "https://maven.minecraftforge.net";
 const NEO_MAVEN = "https://maven.neoforged.net/releases";
 function parseMavenVersions(xml) {
@@ -967,7 +994,7 @@ async function installForgeLike(kind, mcVersion, loaderVersion, concurrency, onP
       const classpath = [...spec.classpath.map((c) => resolveMavenToken(`[${c}]`)), jarPath];
       const args = spec.args.map((arg) => applyTokens(arg, vars));
       try {
-        await run(javaPath, ["-cp", classpath.join(node_path.delimiter), mainClassOf(jarPath), ...args], {
+        await run$1(javaPath, ["-cp", classpath.join(node_path.delimiter), mainClassOf(jarPath), ...args], {
           cwd: workDir,
           maxBuffer: 1024 * 1024 * 64,
           timeout: 10 * 60 * 1e3
@@ -1876,6 +1903,92 @@ function pingServer(address, timeoutMs = 5e3) {
       finish({ online: false, error: reason });
     });
   });
+}
+const run = node_util.promisify(node_child_process.execFile);
+const APP_ID = "brick-launcher";
+const DESKTOP_FILE = `${APP_ID}.desktop`;
+function markerPath() {
+  return node_path.join(paths.root, ".desktop-integrated");
+}
+function execCommand() {
+  const target = process.env.APPIMAGE || process.execPath;
+  return `"${target.replace(/(["\\$`])/g, "\\$1")}"`;
+}
+async function iconTarget() {
+  const dir = node_path.join(node_os.homedir(), ".local", "share", "icons", "hicolor", "512x512", "apps");
+  const sources = [
+    node_path.join(process.resourcesPath ?? "", "build", "icon.png"),
+    node_path.join(electron.app.getAppPath(), "build", "icon.png"),
+    node_path.join(process.cwd(), "build", "icon.png")
+  ];
+  const source = sources.find((p) => p && node_fs.existsSync(p));
+  if (!source) return null;
+  await promises.mkdir(dir, { recursive: true });
+  const dest = node_path.join(dir, `${APP_ID}.png`);
+  await promises.copyFile(source, dest);
+  return dest;
+}
+function desktopEntry(iconValue) {
+  return [
+    "[Desktop Entry]",
+    "Type=Application",
+    "Name=Brick Launcher",
+    "GenericName=Minecraft Launcher",
+    "Comment=Minecraft launcher with mod browsing and every loader",
+    `Exec=${execCommand()} %U`,
+    `Icon=${iconValue}`,
+    "Terminal=false",
+    "Categories=Game;ActionGame;",
+    "Keywords=minecraft;mods;modrinth;curseforge;games;",
+    `StartupWMClass=${APP_ID}`,
+    ""
+  ].join("\n");
+}
+async function trustDesktopFile(path) {
+  await promises.chmod(path, 493).catch(() => {
+  });
+  await run("gio", ["set", path, "metadata::trusted", "true"]).catch(() => {
+  });
+}
+async function integrateLinuxDesktop(force = false) {
+  if (node_os.platform() !== "linux") return { applied: false, reason: "Not running on Linux." };
+  if (!force && node_fs.existsSync(markerPath())) {
+    return { applied: false, reason: "Already integrated once." };
+  }
+  try {
+    const icon = await iconTarget();
+    const entry = desktopEntry(icon ?? APP_ID);
+    const appsDir = node_path.join(node_os.homedir(), ".local", "share", "applications");
+    await promises.mkdir(appsDir, { recursive: true });
+    const menuEntry = node_path.join(appsDir, DESKTOP_FILE);
+    await promises.writeFile(menuEntry, entry);
+    await promises.chmod(menuEntry, 420).catch(() => {
+    });
+    let desktopDir = node_path.join(node_os.homedir(), "Desktop");
+    try {
+      const { stdout } = await run("xdg-user-dir", ["DESKTOP"]);
+      if (stdout.trim()) desktopDir = stdout.trim();
+    } catch {
+    }
+    let desktopShortcut;
+    if (node_fs.existsSync(desktopDir)) {
+      desktopShortcut = node_path.join(desktopDir, DESKTOP_FILE);
+      await promises.writeFile(desktopShortcut, entry);
+      await trustDesktopFile(desktopShortcut);
+    }
+    await run("update-desktop-database", [appsDir]).catch(() => {
+    });
+    await run("gtk-update-icon-cache", [
+      "-f",
+      "-t",
+      node_path.join(node_os.homedir(), ".local", "share", "icons", "hicolor")
+    ]).catch(() => {
+    });
+    await promises.writeFile(markerPath(), (/* @__PURE__ */ new Date()).toISOString());
+    return { applied: true, menuEntry, desktopShortcut };
+  } catch (err) {
+    return { applied: false, reason: err instanceof Error ? err.message : String(err) };
+  }
 }
 const API$1 = "https://api.modrinth.com/v2";
 const LOADER_NAMES = /* @__PURE__ */ new Set([
@@ -3098,6 +3211,7 @@ function registerIpc() {
       }
     }
   );
+  handle("app:createShortcuts", () => integrateLinuxDesktop(true));
   handle("servers:list", (instanceId) => listServers(instanceId));
   handle(
     "servers:add",
@@ -3229,6 +3343,7 @@ electron.app.whenReady().then(() => {
   store.load();
   registerIpc();
   createWindow();
+  void integrateLinuxDesktop();
   electron.app.on("activate", () => {
     if (electron.BrowserWindow.getAllWindows().length === 0) createWindow();
   });

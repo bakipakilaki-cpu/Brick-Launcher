@@ -38,13 +38,30 @@
   "build": {
     "appId": "gg.brick.launcher",
     "productName": "Brick Launcher",
-    "directories": { "output": "release" },
-    "files": ["out/**/*", "resources/**/*"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
     "mac": {
       "category": "public.app-category.games",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "darkModeSupport": true,
       "identity": null
@@ -52,8 +69,18 @@
     "win": {
       "icon": "build/icon.ico",
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "zip", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -66,10 +93,44 @@
       "icon": "build/icon.png",
       "category": "Game",
       "synopsis": "Minecraft launcher with mod browsing and every loader",
+      "description": "Minecraft launcher with Modrinth/CurseForge browsing, every mod loader, skins and instances.",
+      "desktop": {
+        "entry": {
+          "Name": "Brick Launcher",
+          "GenericName": "Minecraft Launcher",
+          "Categories": "Game;ActionGame;",
+          "Keywords": "minecraft;mods;modrinth;curseforge;games;",
+          "StartupWMClass": "brick-launcher",
+          "Terminal": "false",
+          "Type": "Application"
+        }
+      },
       "target": [
-        { "target": "AppImage", "arch": ["x64"] },
-        { "target": "tar.gz", "arch": ["x64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
-    }
+    },
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "build/icon.png"
+      }
+    ]
   }
 }

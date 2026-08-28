@@ -14669,6 +14669,17 @@ const MemoryStick = createLucideIcon("MemoryStick", [
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
+const Monitor = createLucideIcon("Monitor", [
+  ["rect", { width: "20", height: "14", x: "2", y: "3", rx: "2", key: "48i651" }],
+  ["line", { x1: "8", x2: "16", y1: "21", y2: "21", key: "1svkeh" }],
+  ["line", { x1: "12", x2: "12", y1: "17", y2: "21", key: "vw1qmm" }]
+]);
+/**
+ * @license lucide-react v0.469.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
 const Package = createLucideIcon("Package", [
   [
     "path",
@@ -15096,6 +15107,7 @@ const api = {
   openExternal: raw.app.openExternal,
   pickFiles: raw.app.pickFiles,
   readImage: raw.app.readImage,
+  createShortcuts: () => raw.app.createShortcuts(),
   getSettings: () => raw.settings.get(),
   setSettings: (patch) => raw.settings.set(patch),
   listAccounts: () => raw.accounts.list(),
@@ -18210,11 +18222,15 @@ function SettingsPage() {
   const [installing, setInstalling] = reactExports.useState(null);
   const [accountsOpen, setAccountsOpen] = reactExports.useState(false);
   const [paths, setPaths] = reactExports.useState({});
+  const [platform, setPlatform] = reactExports.useState("");
   const [clientId, setClientId] = reactExports.useState("");
   const [cfKey, setCfKey] = reactExports.useState("");
   reactExports.useEffect(() => {
     api.detectJava().then(setRuntimes).catch(() => setRuntimes([]));
-    api.info().then((info) => setPaths(info.paths));
+    api.info().then((info) => {
+      setPaths(info.paths);
+      setPlatform(info.platform);
+    });
   }, []);
   reactExports.useEffect(() => {
     if (settings) {
@@ -18337,7 +18353,7 @@ function SettingsPage() {
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "spacer" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tag", children: runtime.source === "bundled" ? "Brick" : "System" })
       ] }, runtime.path)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hstack sm", style: { flexWrap: "wrap" }, children: [21, 17, 8].map((major) => {
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hstack sm", style: { flexWrap: "wrap" }, children: [25, 21, 17, 8].map((major) => {
         const present = runtimes?.some((r2) => r2.major === major);
         return /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
@@ -18484,6 +18500,34 @@ function SettingsPage() {
         }
       )
     ] }),
+    platform === "linux" && /* @__PURE__ */ jsxRuntimeExports.jsx(Section, { icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Monitor, { size: 17 }), title: "Desktop integration", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Row,
+      {
+        title: "Application menu and desktop shortcut",
+        hint: "Brick adds these automatically on first run. Use this to put them back if they were removed, or after moving the AppImage.",
+        control: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            className: "btn",
+            onClick: async () => {
+              try {
+                const result = await api.createShortcuts();
+                toast(
+                  result.applied ? "success" : "error",
+                  result.applied ? `Added to the application menu${result.desktopShortcut ? " and desktop" : ""}.` : result.reason ?? "Could not create shortcuts."
+                );
+              } catch (err) {
+                toast("error", err instanceof Error ? err.message : String(err));
+              }
+            },
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Monitor, { size: 15 }),
+              " Create shortcuts"
+            ]
+          }
+        )
+      }
+    ) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Section, { icon: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderOpen, { size: 17 }), title: "Files", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "stack sm", children: [
       { label: "Instances", path: paths.instances },
       { label: "Shared game files", path: paths.shared },
@@ -18861,7 +18905,7 @@ function JavaStep({ onNext }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "stack sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "field-label", children: "Install a runtime now" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hstack sm", style: { flexWrap: "wrap" }, children: [21, 17, 8].map((major) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hstack sm", style: { flexWrap: "wrap" }, children: [25, 21, 17, 8].map((major) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
           className: "btn",
@@ -18871,7 +18915,7 @@ function JavaStep({ onNext }) {
             installing === major ? /* @__PURE__ */ jsxRuntimeExports.jsx(Spinner, {}) : has(major) ? /* @__PURE__ */ jsxRuntimeExports.jsx(Check, { size: 15 }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Download, { size: 15 }),
             "Java ",
             major,
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "faint", style: { fontWeight: 500 }, children: major === 21 ? "1.20.5+" : major === 17 ? "1.17–1.20.4" : "1.16 and older" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "faint", style: { fontWeight: 500 }, children: major === 25 ? "newest" : major === 21 ? "1.20.5+" : major === 17 ? "1.17–1.20.4" : "1.16 and older" })
           ]
         },
         major
